@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Eintrag #{{ entry.id }} – Admin – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card card-wide">
+  <h1>Eintrag #{{ entry.id }}</h1>
+  <a href="{{ url_for('admin_entries') }}">&larr; Zurück zur Übersicht</a>
+
+  <table class="detail-table">
+    <tr><th>Erfasst am (UTC)</th><td>{{ entry.created_at }}</td></tr>
+    <tr><th>Verletzte Person</th><td>{{ entry.injured_person }}</td></tr>
+    <tr><th>Unfall Datum/Uhrzeit</th><td>{{ entry.incident_dt }}</td></tr>
+    <tr><th>Ort</th><td>{{ entry.location }}</td></tr>
+    <tr><th>Hergang</th><td class="pre">{{ entry.description }}</td></tr>
+    <tr><th>Art der Verletzung</th><td>{{ entry.injury_type }}</td></tr>
+    <tr><th>Ersthelfer</th><td>{{ entry.first_aiders }}</td></tr>
+    <tr><th>Zeugen</th><td>{{ entry.witnesses }}</td></tr>
+  </table>
+
+  <details class="hash-details">
+    <summary>Kryptographische Integrität</summary>
+    <table class="detail-table mono">
+      <tr><th>Vorheriger Hash</th><td>{{ entry.previous_hash or '(erster Eintrag)' }}</td></tr>
+      <tr><th>Eintrag-Hash (SHA-256)</th><td>{{ entry.entry_hash }}</td></tr>
+    </table>
+  </details>
+
+  {% if amendments %}
+  <h2>Nachträge</h2>
+  {% for a in amendments %}
+  <div class="amendment">
+    <strong>Nachtrag #{{ a.id }}</strong> – {{ a.created_at }} von {{ a.amended_by }}<br>
+    <em>Begründung:</em> {{ a.reason }}<br>
+    <em>Text:</em> {{ a.amendment_text }}<br>
+    <details>
+      <summary>Hash</summary>
+      <code>{{ a.amendment_hash }}</code>
+    </details>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h2>Nachtrag hinzufügen</h2>
+  <p class="info">Einträge können nie geändert werden. Korrekturen oder Ergänzungen werden als unveränderlicher Nachtrag gespeichert.</p>
+  <form method="post" action="{{ url_for('admin_amend', eid=entry.id) }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="reason">Begründung / Anlass <span class="req">*</span></label>
+      <input type="text" id="reason" name="reason" maxlength="500" required>
+    </div>
+    <div class="form-group">
+      <label for="amendment_text">Nachtragstext <span class="req">*</span></label>
+      <textarea id="amendment_text" name="amendment_text" rows="3" maxlength="2000" required></textarea>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Nachtrag speichern</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

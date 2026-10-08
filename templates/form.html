@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Neuen Eintrag erstellen – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Unfall / Verletzung eintragen</h1>
+  <p class="info">Bitte alle Felder vollständig ausfüllen. Der Eintrag wird revisionssicher gespeichert und ist danach nicht mehr veränderbar.</p>
+
+  <form method="post" action="{{ url_for('submit_entry') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <fieldset>
+      <legend>Betroffene Person</legend>
+
+      <div class="form-group {% if 'injured_person' in errors %}error{% endif %}">
+        <label for="injured_person">Verletzte Person <span class="req">*</span></label>
+        <input type="text" id="injured_person" name="injured_person"
+               value="{{ values.get('injured_person', '') }}"
+               maxlength="200" autocomplete="off" required>
+        {% if 'injured_person' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ereignis</legend>
+
+      <div class="form-group {% if 'incident_dt' in errors %}error{% endif %}">
+        <label for="incident_dt">Datum und Uhrzeit des Unfalls <span class="req">*</span></label>
+        <input type="datetime-local" id="incident_dt" name="incident_dt"
+               value="{{ values.get('incident_dt', now) }}" required>
+        {% if 'incident_dt' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+
+      <div class="form-group {% if 'location' in errors %}error{% endif %}">
+        <label for="location">Unfallort <span class="req">*</span></label>
+        <input type="text" id="location" name="location"
+               value="{{ values.get('location', '') }}"
+               maxlength="300" placeholder="z. B. Lagerraum EG, Küche" required>
+        {% if 'location' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+
+      <div class="form-group {% if 'description' in errors %}error{% endif %}">
+        <label for="description">Hergang <span class="req">*</span></label>
+        <textarea id="description" name="description" rows="4"
+                  maxlength="2000" required>{{ values.get('description', '') }}</textarea>
+        <small>Kurze, sachliche Schilderung des Unfallhergangs</small>
+        {% if 'description' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Verletzung und Erste Hilfe</legend>
+
+      <div class="form-group {% if 'injury_type' in errors %}error{% endif %}">
+        <label for="injury_type">Art der Verletzung <span class="req">*</span></label>
+        <input type="text" id="injury_type" name="injury_type"
+               value="{{ values.get('injury_type', '') }}"
+               maxlength="500"
+               placeholder="z. B. Schnittwunde am linken Zeigefinger" required>
+        {% if 'injury_type' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+
+      <div class="form-group {% if 'first_aiders' in errors %}error{% endif %}">
+        <label for="first_aiders">Ersthelfer <span class="req">*</span></label>
+        <input type="text" id="first_aiders" name="first_aiders"
+               value="{{ values.get('first_aiders', '') }}"
+               maxlength="500"
+               placeholder="Name(n) des/der Ersthelfer(s) oder: Keine" required>
+        {% if 'first_aiders' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+
+      <div class="form-group {% if 'witnesses' in errors %}error{% endif %}">
+        <label for="witnesses">Zeugen <span class="req">*</span></label>
+        <input type="text" id="witnesses" name="witnesses"
+               value="{{ values.get('witnesses', '') }}"
+               maxlength="500"
+               placeholder="Name(n) der Zeugen oder: Keine" required>
+        {% if 'witnesses' in errors %}
+          <span class="field-error">Pflichtfeld</span>
+        {% endif %}
+      </div>
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Eintrag revisionssicher speichern</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Integritätsprüfung – Admin – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Hash-Ketten-Prüfung</h1>
+  <p>Es werden {{ count }} Eintrag/Einträge und {{ amend_count }} Nachtrag/Nachträge geprüft.</p>
+
+  {% if ok %}
+    <div class="alert alert-success">
+      ✓ Alle {{ count }} Einträge sind integer. Die Hash-Kette ist lückenlos und unverändert.
+    </div>
+  {% else %}
+    <div class="alert alert-error">
+      ✗ Integritätsfehler gefunden! Folgende Einträge stimmen nicht:
+    </div>
+    <ul>
+      {% for err in errors %}
+        <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+    <p><strong>Hinweis:</strong> Abweichungen können auf eine Manipulation der Datenbank oder einen Softwarefehler hindeuten. Bitte umgehend prüfen und dokumentieren.</p>
+  {% endif %}
+
+  <p><a href="{{ url_for('admin_entries') }}">&larr; Zurück zur Übersicht</a></p>
+</div>
+{% endblock %}

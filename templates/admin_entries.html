@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Einträge – Admin – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card card-wide">
+  <h1>Alle Einträge</h1>
+
+  {% if not entries %}
+    <p>Noch keine Einträge vorhanden.</p>
+  {% else %}
+    <p><strong>{{ entries|length }}</strong> Eintrag/Einträge vorhanden.</p>
+    <table class="entries-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Erfasst am (UTC)</th>
+          <th>Verletzte Person</th>
+          <th>Unfall-Datum</th>
+          <th>Ort</th>
+          <th>Verletzungsart</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td>{{ e.id }}</td>
+          <td>{{ e.created_at }}</td>
+          <td>{{ e.injured_person }}</td>
+          <td>{{ e.incident_dt }}</td>
+          <td>{{ e.location }}</td>
+          <td>{{ e.injury_type }}</td>
+          <td><a href="{{ url_for('admin_entry', eid=e.id) }}">Ansehen</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+{% endblock %}

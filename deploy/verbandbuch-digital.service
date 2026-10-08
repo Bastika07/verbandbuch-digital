@@ -1,0 +1,23 @@
+[Unit]
+Description=Digitales Verbandbuch
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/verbandbuch-digital
+EnvironmentFile=/opt/verbandbuch-digital/.env
+ExecStart=/opt/verbandbuch-digital/venv/bin/gunicorn \
+    --bind 127.0.0.1:8091 \
+    --workers 2 \
+    --access-logfile - \
+    wsgi:app
+Restart=on-failure
+DynamicUser=yes
+StateDirectory=verbandbuch
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/verbandbuch
+
+[Install]
+WantedBy=multi-user.target

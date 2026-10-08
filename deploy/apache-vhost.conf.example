@@ -1,0 +1,19 @@
+# Apache Virtual Host – Beispielkonfiguration (Vorlage, nicht direkt verwendbar)
+# ServerName und ServerAdmin anpassen, dann unter sites-available/ ablegen
+# und mit a2ensite aktivieren.
+#
+# Voraussetzung: Apache-Module proxy und proxy_http aktiv
+#   a2enmod proxy proxy_http
+
+<VirtualHost *:80>
+    ServerName your-domain.example
+    ServerAdmin admin@your-domain.example
+
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:8091/
+    ProxyPassReverse / http://127.0.0.1:8091/
+
+    LogLevel warn
+    ErrorLog  "|/usr/bin/rotatelogs -L ${APACHE_LOG_DIR}/error-verbandbuch.log ${APACHE_LOG_DIR}/error-verbandbuch.log.%Y%m%d 86400"
+    CustomLog "|/usr/bin/rotatelogs -L ${APACHE_LOG_DIR}/access-verbandbuch.log ${APACHE_LOG_DIR}/access-verbandbuch.log.%Y%m%d 86400" combined
+</VirtualHost>

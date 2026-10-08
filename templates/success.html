@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Eintrag gespeichert – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card card-success">
+  <h1>✓ Eintrag erfolgreich gespeichert</h1>
+  <p>Der Unfalleintrag wurde revisionssicher gespeichert und kann nicht nachträglich geändert werden.</p>
+  <p>Vielen Dank.</p>
+  <a href="{{ url_for('new_entry') }}" class="btn-primary">Weiteren Eintrag erfassen</a>
+</div>
+{% endblock %}

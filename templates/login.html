@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Admin-Login – Digitales Verbandbuch{% endblock %}
+{% block content %}
+<div class="card card-narrow">
+  <h1>Admin-Login</h1>
+  <form method="post" action="{{ url_for('admin_login') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="username">Benutzername</label>
+      <input type="text" id="username" name="username" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Passwort</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Anmelden</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
