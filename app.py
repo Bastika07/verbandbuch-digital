@@ -33,6 +33,13 @@ DATA_DIR          = os.environ.get("DATA_DIR",          os.path.join(BASE_DIR, "
 SECRET_KEY        = os.environ.get("SECRET_KEY",        "")
 TEAMS_WEBHOOK_URL = os.environ.get("TEAMS_WEBHOOK_URL", "").strip()
 PUBLIC_BASE_URL   = os.environ.get("PUBLIC_BASE_URL",   "").strip()
+# Proxy-Hops bis Gunicorn – pro Header separat konfigurierbar.
+# X-Forwarded-For:   Anzahl Proxies, die diesen Header schreiben/ergänzen.
+#   NPM → Apache → Gunicorn = 2  (NPM setzt, Apache hängt an)
+#   NPM → Gunicorn direkt   = 1
+# X-Forwarded-Proto: Anzahl Proxies, die diesen Header setzen (i. d. R. 1, da nur NPM ihn setzt).
+PROXY_X_FOR   = int(os.environ.get("PROXY_X_FOR",   "1"))
+PROXY_X_PROTO = int(os.environ.get("PROXY_X_PROTO", "1"))
 
 if not SECRET_KEY:
     raise RuntimeError("Umgebungsvariable SECRET_KEY muss gesetzt sein.")
@@ -56,8 +63,8 @@ LOGIN_WINDOW   = 15 * 60  # Sekunden
 LOGIN_MAX_FAIL = 5         # Fehlversuche pro Username+IP im Fenster
 
 app = Flask(__name__)
-# NPM → Gunicorn: ein Proxy-Hop (kein x_host – verhindert Host-Spoofing)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+# x_host bleibt 0 (nicht setzen) – Host-Header-Spoofing verhindern
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=PROXY_X_FOR, x_proto=PROXY_X_PROTO)
 app.secret_key = SECRET_KEY
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
