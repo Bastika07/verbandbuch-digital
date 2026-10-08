@@ -680,7 +680,9 @@ def admin_export():
             safe(r["injury_type"]), safe(r["witnesses"]), safe(r["first_aiders"]),
             r["entry_hash"], r["previous_hash"],
         ])
-    resp = make_response(buf.getvalue())
+    # utf-8-sig = UTF-8 mit BOM (EF BB BF) – Excel erkennt damit die Kodierung korrekt.
+    data = buf.getvalue().encode("utf-8-sig")
+    resp = make_response(data)
     resp.headers["Content-Type"]        = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = 'attachment; filename="verbandbuch_export.csv"'
     return resp
