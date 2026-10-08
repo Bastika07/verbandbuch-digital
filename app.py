@@ -662,8 +662,14 @@ def admin_verify():
 def admin_export():
     db = get_db()
     rows = db.execute("SELECT * FROM entries ORDER BY id").fetchall()
-    buf = io.StringIO()
-    w = csv.writer(buf, quoting=csv.QUOTE_ALL)
+    # Excel-kompatibel (besonders deutsches Excel):
+    # - sep=; als erste Zeile teilt Excel das Trennzeichen mit
+    # - Semikolon als Delimiter (dt. Excel-Standard)
+    # - CRLF-Zeilenenden
+    # - UTF-8 BOM via utf-8-sig
+    buf = io.StringIO(newline="")
+    buf.write("sep=;\r\n")
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_ALL, lineterminator="\r\n")
     w.writerow([
         "ID", "Erfasst am (UTC)", "Verletzte Person", "Unfall Datum/Uhrzeit",
         "Ort", "Hergang", "Art der Verletzung", "Zeugen", "Ersthelfer",
