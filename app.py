@@ -15,11 +15,14 @@ import io
 import json
 import os
 import secrets
+import smtplib
 import sqlite3
+import ssl
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from functools import wraps
 
 from flask import (Flask, abort, flash, g, make_response, redirect,
@@ -32,7 +35,19 @@ BASE_DIR          = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR          = os.environ.get("DATA_DIR",          os.path.join(BASE_DIR, "data"))
 SECRET_KEY        = os.environ.get("SECRET_KEY",        "")
 TEAMS_WEBHOOK_URL = os.environ.get("TEAMS_WEBHOOK_URL", "").strip()
+WEBHOOK_URL       = os.environ.get("WEBHOOK_URL", "").strip() or TEAMS_WEBHOOK_URL
+NOTIFICATION_METHOD = os.environ.get(
+    "NOTIFICATION_METHOD", "webhook" if WEBHOOK_URL else "none"
+).strip().lower()
 PUBLIC_BASE_URL   = os.environ.get("PUBLIC_BASE_URL",   "").strip()
+SMTP_HOST         = os.environ.get("SMTP_HOST", "").strip()
+SMTP_SECURITY     = os.environ.get("SMTP_SECURITY", "starttls").strip().lower()
+SMTP_PORT         = int(os.environ.get("SMTP_PORT", "465" if SMTP_SECURITY == "ssl" else "587"))
+SMTP_USERNAME     = os.environ.get("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD     = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM         = os.environ.get("SMTP_FROM", "").strip()
+SMTP_TO           = [address.strip() for address in os.environ.get("SMTP_TO", "").split(",")
+                     if address.strip()]
 # Proxy-Hops bis Gunicorn – pro Header separat konfigurierbar.
 # X-Forwarded-For:   Anzahl Proxies, die diesen Header schreiben/ergänzen.
 #   NPM → Apache → Gunicorn = 2  (NPM setzt, Apache hängt an)
@@ -43,6 +58,22 @@ PROXY_X_PROTO = int(os.environ.get("PROXY_X_PROTO", "1"))
 
 if not SECRET_KEY:
     raise RuntimeError("Umgebungsvariable SECRET_KEY muss gesetzt sein.")
+
+if NOTIFICATION_METHOD not in {"none", "webhook", "smtp"}:
+    raise RuntimeError("NOTIFICATION_METHOD muss none, webhook oder smtp sein.")
+if NOTIFICATION_METHOD == "webhook" and not WEBHOOK_URL:
+    raise RuntimeError("Für Webhook-Benachrichtigungen muss WEBHOOK_URL gesetzt sein.")
+if NOTIFICATION_METHOD == "smtp":
+    if not SMTP_HOST or not SMTP_FROM or not SMTP_TO:
+        raise RuntimeError("Für SMTP müssen SMTP_HOST, SMTP_FROM und SMTP_TO gesetzt sein.")
+    if SMTP_SECURITY not in {"starttls", "ssl", "none"}:
+        raise RuntimeError("SMTP_SECURITY muss starttls, ssl oder none sein.")
+    if not 1 <= SMTP_PORT <= 65535:
+        raise RuntimeError("SMTP_PORT muss zwischen 1 und 65535 liegen.")
+    if bool(SMTP_USERNAME) != bool(SMTP_PASSWORD):
+        raise RuntimeError("SMTP_USERNAME und SMTP_PASSWORD müssen gemeinsam gesetzt sein.")
+    if SMTP_USERNAME and SMTP_SECURITY == "none":
+        raise RuntimeError("SMTP-Anmeldung erfordert starttls oder ssl.")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "verbandbuch.sqlite")
@@ -215,21 +246,19 @@ def clear_login_attempts(db, username: str, ip: str) -> None:
     )
 
 
-# ── Teams-Webhook (optional, keine Gesundheitsdaten) ─────────────────────────
-def notify_teams(entry_id: int) -> None:
-    """
-    Sendet eine anonymisierte Benachrichtigung an Microsoft Teams.
-    Enthält ausschließlich Eintrag-ID + Admin-Link – keine Namen,
-    Verletzungen, Orte oder sonstige personenbezogene/Gesundheitsdaten.
-    Wird übersprungen wenn TEAMS_WEBHOOK_URL nicht gesetzt ist.
-    Fehler blockieren die Speicherung NICHT.
-    """
-    if not TEAMS_WEBHOOK_URL:
-        return
-    link = ""
+# ── Benachrichtigungen (optional, keine Gesundheitsdaten) ─────────────────────
+def entry_admin_link(entry_id: int) -> str:
     if PUBLIC_BASE_URL:
-        link = (f"\n\n[Eintrag im Admin-Bereich öffnen]"
-                f"({PUBLIC_BASE_URL.rstrip('/')}/admin/entry/{entry_id})")
+        return f"{PUBLIC_BASE_URL.rstrip('/')}/admin/entry/{entry_id}"
+    return ""
+
+
+def notify_webhook(entry_id: int) -> None:
+    """Teams-kompatible MessageCard mit ausschließlich ID und optionalem Link."""
+    admin_link = entry_admin_link(entry_id)
+    link = ""
+    if admin_link:
+        link = f"\n\n[Eintrag im Admin-Bereich öffnen]({admin_link})"
     payload = json.dumps({
         "@type":      "MessageCard",
         "@context":   "http://schema.org/extensions",
@@ -239,15 +268,51 @@ def notify_teams(entry_id: int) -> None:
         "text":       f"Eintrag **#{entry_id}** wurde gespeichert.{link}",
     }).encode("utf-8")
     req = urllib.request.Request(
-        TEAMS_WEBHOOK_URL,
+        WEBHOOK_URL,
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    with urllib.request.urlopen(req, timeout=3) as response:
+        response.read()
+
+
+def notify_smtp(entry_id: int) -> None:
+    """E-Mail ohne Namen, Verletzungen, Orte oder andere Formulardaten."""
+    message = EmailMessage()
+    message["Subject"] = "Neuer Verbandbuch-Eintrag"
+    message["From"] = SMTP_FROM
+    message["To"] = ", ".join(SMTP_TO)
+    text = f"Eintrag #{entry_id} wurde gespeichert."
+    admin_link = entry_admin_link(entry_id)
+    if admin_link:
+        text += f"\n\nEintrag im Admin-Bereich öffnen:\n{admin_link}"
+    message.set_content(text)
+
+    if SMTP_SECURITY == "ssl":
+        connection = smtplib.SMTP_SSL(
+            SMTP_HOST, SMTP_PORT, timeout=3, context=ssl.create_default_context()
+        )
+    else:
+        connection = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=3)
+    with connection as smtp:
+        if SMTP_SECURITY == "starttls":
+            smtp.starttls(context=ssl.create_default_context())
+        if SMTP_USERNAME:
+            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+        smtp.send_message(message, from_addr=SMTP_FROM, to_addrs=SMTP_TO)
+
+
+def notify_entry(entry_id: int) -> None:
+    """Versand nach DB-Commit; Fehler dürfen die Speicherung nicht blockieren."""
     try:
-        urllib.request.urlopen(req, timeout=3).read()
+        if NOTIFICATION_METHOD == "webhook":
+            notify_webhook(entry_id)
+        elif NOTIFICATION_METHOD == "smtp":
+            notify_smtp(entry_id)
     except Exception:
-        app.logger.warning("Teams-Benachrichtigung fehlgeschlagen", exc_info=True)
+        # Keine Exception-Details: können Webhook-URLs oder SMTP-Zugangsdaten enthalten.
+        app.logger.warning("Benachrichtigung via %s fehlgeschlagen", NOTIFICATION_METHOD)
 
 
 # ── Hash-Kette ────────────────────────────────────────────────────────────────
@@ -449,7 +514,7 @@ def submit_entry():
             db.execute("ROLLBACK")
         raise
 
-    notify_teams(entry_id)
+    notify_entry(entry_id)
     return redirect(url_for("success"))
 
 

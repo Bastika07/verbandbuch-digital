@@ -91,7 +91,7 @@ Der Original-Eintrag bleibt immer erhalten.
 | A07 | Identification & Auth Failures | Login-Rate-Limiting (5 Versuche / 15 Min., SQLite-basiert, Multi-Worker-fähig). CSRF-Schutz (Byte-Vergleich via `hmac.compare_digest`). Session-Versionierung bei Passwortänderung. Mindestlänge 15 Zeichen. | ✅ |
 | A08 | Software & Data Integrity Failures | SHA-256-Kette, DB-Trigger gegen DELETE/UPDATE, Integritätsprüfung im Admin-Bereich, verkettete Nachträge für Korrekturen. | ✅ |
 | A09 | Security Logging & Monitoring | Gunicorn Access-Log aktiv. Kein separates Audit-Log (welcher Admin hat wann welchen Eintrag eingesehen/exportiert). | ⚠️ offen |
-| A10 | SSRF | Teams-Webhook ausschließlich über statisch konfigurierte Umgebungsvariable – kein nutzergesteuerter Request, keine Redirects. | ✅ |
+| A10 | SSRF | Webhook- und SMTP-Ziel ausschließlich über statisch konfigurierte Umgebungsvariablen – kein nutzergesteuerter Request. Nur vertrauenswürdige Endpunkte konfigurieren. | ✅ |
 
 ---
 
@@ -137,7 +137,7 @@ cd /opt/verbandbuch-digital
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 cp .env.example .env
-# .env anpassen: SECRET_KEY, DATA_DIR, SECURE_COOKIES=1, PUBLIC_BASE_URL, TEAMS_WEBHOOK_URL
+# .env anpassen: SECRET_KEY, DATA_DIR, SECURE_COOKIES=1, PUBLIC_BASE_URL, Benachrichtigungen
 chmod 600 .env
 ```
 
@@ -183,21 +183,77 @@ HSTS-Header am Reverse Proxy setzen.
 | `DATA_DIR` | – | Pfad zur SQLite-Datei (Standard: `./data`) |
 | `SECURE_COOKIES` | – | `1` bei HTTPS (empfohlen), `0` nur für lokale Tests ohne TLS |
 | `PUBLIC_BASE_URL` | – | Öffentliche Basis-URL, z. B. `https://verbandbuch.example.com` (für Admin-Links in Benachrichtigungen) |
-| `TEAMS_WEBHOOK_URL` | – | Microsoft Teams Incoming Webhook (leer lassen = deaktiviert) |
+| `NOTIFICATION_METHOD` | – | `none`, `webhook` oder `smtp`. Ohne Angabe: `webhook` bei gesetzter Webhook-URL, sonst `none` |
+| `WEBHOOK_URL` | bei Webhook | URL für einen Teams-kompatiblen JSON-Webhook |
+| `TEAMS_WEBHOOK_URL` | – | Bisheriger Variablenname; Fallback, falls `WEBHOOK_URL` leer ist |
+| `SMTP_HOST` | bei SMTP | Hostname des Mailservers |
+| `SMTP_PORT` | – | Standard: `587` bei STARTTLS, `465` bei `SMTP_SECURITY=ssl` |
+| `SMTP_SECURITY` | – | `starttls` (Standard), `ssl` (TLS ab Verbindungsaufbau) oder `none` (nur internes Relay) |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | – | Optionales Login; beide setzen oder beide leer lassen. Anmeldung nur mit TLS |
+| `SMTP_FROM` | bei SMTP | Absenderadresse |
+| `SMTP_TO` | bei SMTP | Empfängeradressen, durch Kommas getrennt |
 
 ---
 
-## Teams-Benachrichtigung (optional)
+## Benachrichtigungen per Webhook oder SMTP (optional)
 
-Bei gesetztem `TEAMS_WEBHOOK_URL` wird nach jedem neuen Eintrag eine Benachrichtigung gesendet.
+Nach jedem neuen Eintrag wird über den ausgewählten Kanal eine Benachrichtigung gesendet.
+`NOTIFICATION_METHOD=none` deaktiviert den Versand ausdrücklich, auch wenn Zugangsdaten gesetzt sind.
+Bestehende Installationen mit `TEAMS_WEBHOOK_URL` funktionieren ohne neue Einstellungen weiter.
+
+### Webhook (z. B. Microsoft Teams)
+
+```ini
+NOTIFICATION_METHOD=webhook
+WEBHOOK_URL=https://your-webhook.example/endpoint
+```
+
+Der Webhook erhält eine Teams-kompatible **MessageCard** als JSON-POST.
+Andere Empfänger müssen dieses Format verarbeiten können.
+
+### SMTP
+
+```ini
+NOTIFICATION_METHOD=smtp
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls
+SMTP_USERNAME=verbandbuch@example.com
+SMTP_PASSWORD=CHANGE_ME
+SMTP_FROM=verbandbuch@example.com
+SMTP_TO=arbeitsschutz@example.com,sicherheit@example.com
+```
+
+Für implizites TLS `SMTP_SECURITY=ssl` und `SMTP_PORT=465` verwenden.
+TLS-Verbindungen prüfen das Serverzertifikat. Für ein internes Relay ohne Anmeldung
+`SMTP_USERNAME` und `SMTP_PASSWORD` leer lassen; unverschlüsseltes SMTP (`SMTP_SECURITY=none`)
+nur in einem vertrauenswürdigen internen Netz einsetzen.
+
+Die Anwendung lädt `.env` nicht selbst: systemd liest sie über `EnvironmentFile`.
+Bei lokalem Start müssen die Variablen in der Prozessumgebung gesetzt sein.
+Nach Konfigurationsänderungen den Dienst neu starten.
 
 **Datenschutz:** Es werden **keine** Gesundheitsdaten, Namen, Verletzungen oder Orte übertragen.
 Nur Eintrag-ID und ein Admin-Link (wenn `PUBLIC_BASE_URL` gesetzt).
 
 - Fehler beim Versand blockieren die Speicherung **nicht**
-- Webhook-URL darf nie in Logs ausgegeben werden
-- Nur HTTPS-Endpunkte verwenden
+- Webhook-URLs und SMTP-Zugangsdaten werden auch bei Versandfehlern nicht protokolliert
+- Für Webhooks nur HTTPS-Endpunkte verwenden
+- Konfigurationsfehler des ausgewählten Kanals verhindern den Start
+- Versand erfolgt synchron nach dem DB-Commit mit Netzwerk-Timeouts von 3 Sekunden;
+  kein automatischer Wiederholungsversuch und kein Wechsel auf den anderen Kanal
 - Für produktiven Betrieb empfiehlt sich ein Outbox-Pattern nach DB-Commit
+
+### Tests
+
+Nach Installation der Abhängigkeiten:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Die Tests verwenden temporäre Datenbanken und simulierten Versand; es werden keine
+echten E-Mails oder Webhook-Anfragen versendet.
 
 ---
 
@@ -217,7 +273,7 @@ Nur Eintrag-ID und ein Admin-Link (wenn `PUBLIC_BASE_URL` gesetzt).
 ## Projektstruktur
 
 ```
-app.py                          # Flask-App (Routen, Hash-Kette, DB, Rate Limiting, Teams)
+app.py                          # Flask-App (Routen, Hash-Kette, DB, Rate Limiting, Benachrichtigungen)
 wsgi.py                         # Gunicorn-Einstieg
 requirements.txt                # Abhängigkeiten (Flask, Gunicorn, Werkzeug)
 templates/
